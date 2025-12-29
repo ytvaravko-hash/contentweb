@@ -3,17 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PRO Монтаж (FREE)</title>
-    
-    <!-- COI Service Worker - включает SharedArrayBuffer на GitHub Pages -->
-    <!-- Это ОБЯЗАТЕЛЬНО должно быть ПЕРВЫМ скриптом! -->
-    <script src="coi-serviceworker.js"></script>
-    
-    <link rel="stylesheet" href="styles.css?v=3">
+    <title>PRO Монтаж</title>
+    <link rel="stylesheet" href="styles.css?v=4">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- FFmpeg.wasm для обработки видео в браузере -->
-    <!-- Пробуем локальную версию, если не работает - fallback на CDN -->
-    <script src="libs/ffmpeg.min.js" onerror="console.error('Local FFmpeg failed, trying CDN...'); this.onerror=null; this.src='https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';"></script>
+    <!-- FFmpeg НЕ нужен - видео обрабатывается на VPS сервере! -->
 </head>
 <body>
     <div class="app-container" id="app">
@@ -21,7 +14,7 @@
         <!-- ЭКРАН 1: Выбор режима -->
         <div class="screen" id="screen-mode" data-screen="1">
             <h1 class="screen-title">🎬 PRO Монтаж</h1>
-            <p class="hint-text">Бесплатная обработка прямо в браузере</p>
+            <p class="hint-text">⚡ Быстрая обработка на сервере</p>
             <div class="mode-buttons">
                 <button class="mode-btn" onclick="selectMode('split_screen')">
                     <span class="mode-icon">📱</span>
@@ -36,23 +29,8 @@
             </div>
         </div>
 
-        <!-- ЭКРАН 2: Загрузка видео -->
-        <div class="screen hidden" id="screen-upload" data-screen="2">
-            <h1 class="screen-title">📹 Загрузка видео</h1>
-            <p class="hint-text">Загрузите второе видео для монтажа</p>
-            
-            <div class="upload-container">
-                <input type="file" id="video-file" accept="video/*" style="display:none" onchange="handleVideoUpload(event)">
-                <button class="upload-btn" onclick="document.getElementById('video-file').click()">
-                    <span class="upload-icon">📤</span>
-                    <span class="upload-text">Выбрать видео</span>
-                </button>
-                <p class="upload-info" id="upload-info">Поддерживаются: MP4, MOV, AVI (до 500 МБ)</p>
-            </div>
-        </div>
-
-        <!-- ЭКРАН 3: Настройки -->
-        <div class="screen hidden" id="screen-settings" data-screen="3">
+        <!-- ЭКРАН 2: Настройки -->
+        <div class="screen hidden" id="screen-settings" data-screen="2">
             <h1 class="screen-title" id="selected-mode-title">Настройки</h1>
             
             <!-- Превью композиции -->
@@ -94,60 +72,61 @@
                 </div>
             </div>
             
-            <button class="action-btn" onclick="startProcessing()">
-                🚀 Создать видео
+            <button class="action-btn" onclick="confirmSettings()">
+                ✅ Подтвердить настройки
             </button>
-            <p class="hint-text">💡 Обработка займёт 1-3 минуты</p>
         </div>
 
-        <!-- ЭКРАН 4: Обработка -->
-        <div class="screen hidden" id="screen-processing" data-screen="4">
-            <h1 class="screen-title">⏳ Обработка</h1>
-            <div class="processing-container">
-                <div class="spinner"></div>
-                <p class="processing-status" id="processing-status">Загрузка FFmpeg...</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+        <!-- ЭКРАН 3: Подтверждение -->
+        <div class="screen hidden" id="screen-confirm" data-screen="3">
+            <h1 class="screen-title">📋 Подтверждение</h1>
+            <div class="confirm-container">
+                <div class="confirm-card">
+                    <h3>Выбранные настройки:</h3>
+                    <div class="confirm-item">
+                        <span class="confirm-label">Режим:</span>
+                        <span class="confirm-value" id="confirm-mode">-</span>
+                    </div>
+                    <div class="confirm-item">
+                        <span class="confirm-label">Позиция аватара:</span>
+                        <span class="confirm-value" id="confirm-position">-</span>
+                    </div>
+                    <div class="confirm-item">
+                        <span class="confirm-label">Размер аватара:</span>
+                        <span class="confirm-value" id="confirm-ratio">-</span>
+                    </div>
                 </div>
-                <p class="progress-text" id="progress-text">0%</p>
-                <p class="hint-text">Обработка происходит прямо в вашем браузере</p>
+                
+                <p class="hint-text">
+                    После подтверждения бот попросит вас загрузить второе видео.
+                    <br>Обработка займёт 30-60 секунд! ⚡
+                </p>
+                
+                <button class="action-btn" onclick="sendSettingsToBot()">
+                    🚀 Отправить боту
+                </button>
+                <button class="action-btn secondary" onclick="showScreen(2)">
+                    ← Изменить настройки
+                </button>
             </div>
         </div>
 
-        <!-- ЭКРАН 5: Результат -->
-        <div class="screen hidden" id="screen-result" data-screen="5">
+        <!-- ЭКРАН 4: Успех -->
+        <div class="screen hidden" id="screen-success" data-screen="4">
             <h1 class="screen-title">✅ Готово!</h1>
-            <div class="result-container">
-                <div class="result-icon">🎉</div>
-                <p class="result-text">Ваше видео готово!</p>
-                <video class="result-preview" id="result-preview" controls></video>
-                <button class="download-btn" id="download-btn" onclick="downloadVideo()">
-                    📥 Скачать видео
-                </button>
-                <button class="action-btn secondary" onclick="sendToBot()">
-                    📤 Отправить в бот
-                </button>
-                <button class="action-btn secondary" onclick="resetApp()">
-                    🔄 Создать ещё одно
-                </button>
-            </div>
-        </div>
-
-        <!-- ЭКРАН 6: Ошибка -->
-        <div class="screen hidden" id="screen-error" data-screen="6">
-            <h1 class="screen-title">❌ Ошибка</h1>
-            <div class="error-container">
-                <div class="error-icon">😔</div>
-                <p class="error-text" id="error-text">Произошла ошибка при обработке</p>
-                <button class="action-btn" onclick="resetApp()">
-                    🔙 Попробовать снова
-                </button>
+            <div class="success-container">
+                <div class="success-icon">🎉</div>
+                <p class="success-text">Настройки отправлены боту!</p>
+                <p class="hint-text">
+                    Бот сейчас попросит вас загрузить второе видео.
+                    <br>Это окно закроется автоматически...
+                </p>
+                <div class="spinner"></div>
             </div>
         </div>
 
     </div>
 
-    <script src="script.js?v=3"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>
-
