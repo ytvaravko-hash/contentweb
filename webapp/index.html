@@ -7,7 +7,8 @@
     <link rel="stylesheet" href="styles.css?v=2">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- FFmpeg.wasm для обработки видео в браузере -->
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <!-- Пробуем локальную версию, если не работает - fallback на CDN -->
+    <script src="libs/ffmpeg.min.js" onerror="console.error('Local FFmpeg failed, trying CDN...'); this.onerror=null; this.src='https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';"></script>
 </head>
 <body>
     <div class="app-container" id="app">
