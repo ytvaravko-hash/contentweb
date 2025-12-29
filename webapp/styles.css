@@ -349,5 +349,59 @@ body {
     margin-bottom: 20px;
 }
 
+/* Confirm Screen */
+.confirm-container {
+    padding: 20px 0;
+}
 
+.confirm-card {
+    background: #f9f9f9;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
 
+.confirm-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 15px;
+}
+
+.confirm-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.confirm-item:last-child {
+    border-bottom: none;
+}
+
+.confirm-label {
+    color: #666;
+}
+
+.confirm-value {
+    font-weight: 600;
+    color: #333;
+}
+
+/* Success Screen */
+.success-container {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.success-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+}
+
+.success-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #28a745;
+    margin-bottom: 15px;
+}
