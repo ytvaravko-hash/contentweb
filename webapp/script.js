@@ -250,12 +250,16 @@ function updateState(key, value) {
 // ============================================
 
 // Серверная обработка (БЫСТРО! 10-20x быстрее)
-const USE_SERVER = true; // true = сервер, false = браузер
-const SERVER_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
-    ? 'http://localhost:8001'  // Разработка
-    : `${window.location.protocol}//${window.location.hostname}:8001`;  // Продакшн
+// Автоопределение: сервер только для localhost, браузер для GitHub Pages
+const IS_LOCAL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
+const USE_SERVER = IS_LOCAL; // true только если localhost
+const SERVER_URL = 'http://localhost:8001';  // Локальный сервер
 
 async function startProcessing() {
+    console.log('🔧 Processing mode:', USE_SERVER ? '⚡ SERVER' : '🌐 BROWSER');
+    console.log('📍 Location:', window.location.origin);
+    console.log('🖥️ Is local:', IS_LOCAL);
+    
     if (USE_SERVER) {
         return await startProcessingServer();
     } else {
