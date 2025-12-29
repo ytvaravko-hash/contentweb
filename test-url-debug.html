@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест URL параметров</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .test-block {
+            background: #000;
+            border: 1px solid #0f0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        h2 {
+            color: #0ff;
+            margin-top: 20px;
+        }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+        .warning { color: #ff0; }
+        pre {
+            background: #000;
+            padding: 10px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Диагностика URL параметров</h1>
+    
+    <div class="test-block">
+        <h2>1. Полный URL:</h2>
+        <pre id="fullUrl"></pre>
+    </div>
+    
+    <div class="test-block">
+        <h2>2. Query параметры:</h2>
+        <pre id="queryParams"></pre>
+    </div>
+    
+    <div class="test-block">
+        <h2>3. Параметр video_url (как пришёл):</h2>
+        <pre id="rawVideoUrl"></pre>
+    </div>
+    
+    <div class="test-block">
+        <h2>4. Параметр video_url (декодированный):</h2>
+        <pre id="decodedVideoUrl"></pre>
+    </div>
+    
+    <div class="test-block">
+        <h2>5. Telegram WebApp данные:</h2>
+        <pre id="tgData"></pre>
+    </div>
+    
+    <div class="test-block">
+        <h2>6. Результат:</h2>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        
+        // Получаем параметры
+        const urlParams = new URLSearchParams(window.location.search);
+        const rawVideoUrl = urlParams.get('video_url');
+        const decodedVideoUrl = rawVideoUrl ? decodeURIComponent(rawVideoUrl) : null;
+        
+        // Показываем результаты
+        document.getElementById('fullUrl').textContent = window.location.href;
+        document.getElementById('queryParams').textContent = window.location.search || '(нет параметров)';
+        document.getElementById('rawVideoUrl').textContent = rawVideoUrl || '(отсутствует)';
+        document.getElementById('decodedVideoUrl').textContent = decodedVideoUrl || '(отсутствует)';
+        
+        // Telegram данные
+        const tgInfo = {
+            platform: tg.platform,
+            version: tg.version,
+            colorScheme: tg.colorScheme,
+            user: tg.initDataUnsafe?.user || null
+        };
+        document.getElementById('tgData').textContent = JSON.stringify(tgInfo, null, 2);
+        
+        // Результат
+        const resultDiv = document.getElementById('result');
+        if (!rawVideoUrl) {
+            resultDiv.innerHTML = '<span class="error">❌ ОШИБКА: Параметр video_url отсутствует в URL!</span>';
+        } else if (!decodedVideoUrl) {
+            resultDiv.innerHTML = '<span class="error">❌ ОШИБКА: Не удалось декодировать video_url!</span>';
+        } else if (decodedVideoUrl.includes('dog')) {
+            resultDiv.innerHTML = '<span class="warning">⚠️ ВНИМАНИЕ: URL содержит "dog" (тестовое видео)</span>';
+        } else if (decodedVideoUrl.startsWith('http')) {
+            resultDiv.innerHTML = '<span class="success">✅ OK: URL декодирован правильно!</span>';
+        } else {
+            resultDiv.innerHTML = '<span class="warning">⚠️ ВНИМАНИЕ: URL не похож на HTTP ссылку</span>';
+        }
+        
+        // Логи в консоль
+        console.log('=== DIAGNOSTIC TEST ===');
+        console.log('Full URL:', window.location.href);
+        console.log('Query:', window.location.search);
+        console.log('Raw video_url:', rawVideoUrl);
+        console.log('Decoded video_url:', decodedVideoUrl);
+        console.log('Telegram WebApp:', tgInfo);
+    </script>
+</body>
+</html>
+
