@@ -41,18 +41,39 @@ async function loadFFmpeg() {
         updateProcessingStatus('Загрузка FFmpeg...', 5);
         
         const { createFFmpeg, fetchFile } = FFmpeg;
+        
+        // Пробуем локальный путь, если не работает - fallback на CDN
+        let corePathLocal = 'libs/ffmpeg-core.js';
+        let corePathCDN = 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js';
+        
+        console.log('Trying local FFmpeg core...');
         ffmpeg = createFFmpeg({
             log: true,
-            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+            corePath: corePathLocal
         });
         
-        await ffmpeg.load();
+        try {
+            await ffmpeg.load();
+            console.log('✅ FFmpeg loaded successfully from LOCAL files!');
+        } catch (localError) {
+            console.warn('⚠️ Local FFmpeg failed:', localError.message);
+            console.log('Trying CDN fallback...');
+            
+            // Fallback на CDN
+            ffmpeg = createFFmpeg({
+                log: true,
+                corePath: corePathCDN
+            });
+            
+            await ffmpeg.load();
+            console.log('✅ FFmpeg loaded successfully from CDN!');
+        }
+        
         ffmpegLoaded = true;
-        console.log('FFmpeg loaded successfully');
         return true;
         
     } catch (error) {
-        console.error('FFmpeg load error:', error);
+        console.error('❌ FFmpeg load error (both local and CDN failed):', error);
         return false;
     }
 }
