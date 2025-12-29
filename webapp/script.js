@@ -9,7 +9,8 @@ tg.expand();
 
 // Получаем video_url и bot token из query параметров
 const urlParams = new URLSearchParams(window.location.search);
-const avatarVideoUrl = decodeURIComponent(urlParams.get('video_url') || '');
+// ИСПРАВЛЕНИЕ: Декодируем URL (был закодирован в bot.py)
+const avatarVideoUrl = urlParams.get('video_url') ? decodeURIComponent(urlParams.get('video_url')) : null;
 const userId = tg.initDataUnsafe?.user?.id || 'test_user';
 
 // FFmpeg instance
@@ -30,7 +31,7 @@ const appState = {
 let currentScreen = 1;
 
 // ============================================
-// FFmpeg Setup (v0.12+)
+// FFmpeg Setup
 // ============================================
 
 async function loadFFmpeg() {
@@ -38,63 +39,20 @@ async function loadFFmpeg() {
     
     try {
         updateProcessingStatus('Загрузка FFmpeg...', 5);
-        console.log('Starting FFmpeg v0.12 load...');
         
-        // Проверяем доступность FFmpeg v0.12
-        if (typeof FFmpegWASM === 'undefined' || !FFmpegWASM.FFmpeg) {
-            throw new Error('FFmpeg v0.12 library not loaded. Check script tags in HTML.');
-        }
-        
-        if (typeof FFmpegUtil === 'undefined') {
-            throw new Error('FFmpegUtil library not loaded. Check @ffmpeg/util script tag in HTML.');
-        }
-        
-        console.log('FFmpeg v0.12 libraries detected');
-        
-        // Создаём инстанс FFmpeg v0.12 (FFmpeg из FFmpegWASM, утилиты из FFmpegUtil)
-        const { FFmpeg } = FFmpegWASM;
-        const { toBlobURL } = FFmpegUtil;
-        
-        ffmpeg = new FFmpeg();
-        
-        // Настраиваем логирование
-        ffmpeg.on('log', ({ message }) => {
-            console.log('[FFmpeg]:', message);
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        ffmpeg = createFFmpeg({
+            log: true,
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
         
-        ffmpeg.on('progress', ({ progress, time }) => {
-            const percent = Math.round(progress * 100);
-            const currentProgress = 40 + (percent * 0.5); // 40% до 90%
-            updateProcessingStatus('Обработка видео...', currentProgress);
-            console.log(`[FFmpeg Progress]: ${percent}% (time: ${time})`);
-        });
-        
-        console.log('Loading FFmpeg core files from CDN...');
-        
-        // Core и WASM с CDN, worker локально
-        const baseURL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
-        const workerLocalPath = 'lib/814.ffmpeg.js';
-        
-        const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-        console.log('Core JS loaded as blob URL');
-        
-        const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-        console.log('WASM loaded as blob URL');
-        
-        // Worker из локального файла
-        const workerURL = await toBlobURL(workerLocalPath, 'text/javascript');
-        console.log('Worker loaded from local file');
-        
-        await ffmpeg.load({ coreURL, wasmURL, workerURL });
-        
+        await ffmpeg.load();
         ffmpegLoaded = true;
-        console.log('✅ FFmpeg v0.12 loaded successfully!');
+        console.log('FFmpeg loaded successfully');
         return true;
         
     } catch (error) {
-        console.error('❌ FFmpeg load error:', error);
-        console.error('Error details:', error.message);
-        if (error.stack) console.error('Stack:', error.stack);
+        console.error('FFmpeg load error:', error);
         return false;
     }
 }
@@ -246,169 +204,52 @@ function updateState(key, value) {
 }
 
 // ============================================
-// Screen 4: Processing
+// Screen 4: Processing (FFmpeg в браузере!)
 // ============================================
 
-// Серверная обработка (БЫСТРО! 10-20x быстрее)
-// Автоопределение: сервер только для localhost, браузер для GitHub Pages
-const IS_LOCAL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
-const USE_SERVER = IS_LOCAL; // true только если localhost
-const SERVER_URL = 'http://localhost:8001';  // Локальный сервер
-
 async function startProcessing() {
-    console.log('🔧 Processing mode:', USE_SERVER ? '⚡ SERVER' : '🌐 BROWSER');
-    console.log('📍 Location:', window.location.origin);
-    console.log('🖥️ Is local:', IS_LOCAL);
-    
-    if (USE_SERVER) {
-        return await startProcessingServer();
-    } else {
-        return await startProcessingBrowser();
-    }
-}
-
-// Серверная обработка
-async function startProcessingServer() {
     if (!appState.secondVideoFile) {
         safeAlert('Пожалуйста, загрузите видео');
         return;
     }
     
+    console.log('=== STARTING PROCESSING ===');
+    console.log('Avatar URL:', appState.avatarVideoUrl);
+    console.log('Second video:', appState.secondVideoFile ? appState.secondVideoFile.name : 'none');
+    
     if (!appState.avatarVideoUrl) {
-        safeAlert(
-            '⚠️ URL аватара не найден!\n\n' +
-            'Пожалуйста:\n' +
-            '1. Вернитесь в бот\n' +
-            '2. Создайте видео с аватаром\n' +
-            '3. Нажмите "🎞️ Pro-монтаж (beta)"\n\n' +
-            'Видео должно быть создано в той же сессии.'
-        );
+        console.error('❌ Avatar URL is missing!');
+        safeAlert('Ошибка: URL аватара не найден');
         return;
+    }
+    
+    if (appState.avatarVideoUrl.includes('dog')) {
+        console.error('⚠️ Using DOG test video! This is wrong!');
     }
     
     showScreen(4);
     
     try {
-        // Шаг 1: Скачивание аватара
-        updateProcessingStatus('Загрузка видео аватара...', 10);
-        const avatarBlob = await fetch(appState.avatarVideoUrl).then(r => r.blob());
-        
-        // Шаг 2: Подготовка данных
-        updateProcessingStatus('Подготовка файлов...', 20);
-        
-        const formData = new FormData();
-        formData.append('avatar_video', avatarBlob, 'avatar.mp4');
-        formData.append('second_video', appState.secondVideoFile);
-        formData.append('mode', appState.mode === 'split_screen' ? 'split' : 'corner');
-        formData.append('avatar_position', appState.avatarPosition);
-        formData.append('avatar_size', appState.screenRatio);
-        
-        console.log('🚀 Sending to server:', {
-            server: SERVER_URL,
-            mode: appState.mode,
-            position: appState.avatarPosition,
-            size: appState.screenRatio,
-            avatar_size: avatarBlob.size,
-            second_size: appState.secondVideoFile.size
-        });
-        
-        // Шаг 3: Отправка на сервер
-        updateProcessingStatus('⚡ Быстрая обработка на сервере...', 30);
-        
-        const response = await fetch(`${SERVER_URL}/process`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: response.statusText }));
-            throw new Error(error.detail || 'Server processing failed');
-        }
-        
-        updateProcessingStatus('Загрузка результата...', 80);
-        
-        // Шаг 4: Получение результата
-        const resultBlob = await response.blob();
-        appState.resultBlob = resultBlob;
-        
-        updateProcessingStatus('Готово!', 100);
-        
-        console.log('✅ Server processing complete!', resultBlob.size, 'bytes');
-        
-        // Показываем результат
-        setTimeout(() => showResultScreen(resultBlob), 500);
-        
-    } catch (error) {
-        console.error('Server processing error:', error);
-        
-        // Если сервер не доступен, показываем ошибку
-        if (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            showErrorScreen(
-                '❌ Сервер обработки недоступен\n\n' +
-                'Убедитесь что сервер запущен:\n' +
-                '> python video_api.py\n\n' +
-                'Или установите USE_SERVER = false в script.js\n' +
-                'для браузерной обработки (медленнее)'
-            );
-        } else {
-            showErrorScreen(error.message);
-        }
-    }
-}
-
-// Браузерная обработка (медленнее, но без сервера)
-async function startProcessingBrowser() {
-    if (!appState.secondVideoFile) {
-        safeAlert('Пожалуйста, загрузите видео');
-        return;
-    }
-    
-    if (!appState.avatarVideoUrl) {
-        safeAlert(
-            '⚠️ URL аватара не найден!\n\n' +
-            'Пожалуйста:\n' +
-            '1. Вернитесь в бот\n' +
-            '2. Создайте видео с аватаром\n' +
-            '3. Нажмите "🎞️ Pro-монтаж (beta)"\n\n' +
-            'Видео должно быть создано в той же сессии.'
-        );
-        return;
-    }
-    
-    showScreen(4);
-    
-    try {
-        // Шаг 1: Загрузка FFmpeg v0.12
+        // Шаг 1: Загрузка FFmpeg
         updateProcessingStatus('Загрузка FFmpeg...', 5);
         const loaded = await loadFFmpeg();
         if (!loaded) {
-            throw new Error(
-                'Не удалось загрузить FFmpeg.\n\n' +
-                'Возможные причины:\n' +
-                '• Нестабильное интернет-соединение\n' +
-                '• Браузер не поддерживает WebAssembly\n' +
-                '• Telegram WebApp заблокировал загрузку\n\n' +
-                'Попробуйте:\n' +
-                '1. Обновить страницу\n' +
-                '2. Использовать другой браузер\n' +
-                '3. Проверить интернет-соединение'
-            );
+            throw new Error('Не удалось загрузить FFmpeg');
         }
         
         // Шаг 2: Скачивание аватара
         updateProcessingStatus('Скачивание видео аватара...', 15);
+        console.log('Fetching avatar from:', appState.avatarVideoUrl);
         const avatarBlob = await fetch(appState.avatarVideoUrl).then(r => r.blob());
+        console.log('Avatar blob size:', avatarBlob.size);
         appState.avatarVideoFile = new File([avatarBlob], 'avatar.mp4', { type: 'video/mp4' });
         
-        // Шаг 3: Загрузка файлов в FFmpeg v0.12 (новый API)
+        // Шаг 3: Загрузка файлов в FFmpeg
         updateProcessingStatus('Подготовка файлов...', 25);
-        const { fetchFile } = FFmpegUtil;
+        const { fetchFile } = FFmpeg;
         
-        // FFmpeg v0.12 использует writeFile вместо FS
-        await ffmpeg.writeFile('avatar.mp4', await fetchFile(appState.avatarVideoFile));
-        await ffmpeg.writeFile('second.mp4', await fetchFile(appState.secondVideoFile));
-        
-        console.log('Files written to FFmpeg filesystem');
+        ffmpeg.FS('writeFile', 'avatar.mp4', await fetchFile(appState.avatarVideoFile));
+        ffmpeg.FS('writeFile', 'second.mp4', await fetchFile(appState.secondVideoFile));
         
         // Шаг 4: Композиция через FFmpeg
         updateProcessingStatus('Объединение видео...', 40);
@@ -417,18 +258,21 @@ async function startProcessingBrowser() {
         let ffmpegCommand = [];
         
         if (mode === 'split_screen') {
-            // Split screen composition
+            // Split screen composition - CROP to fill, no black bars!
             if (avatarPosition === 'top' || avatarPosition === 'bottom') {
                 const avatarHeight = screenRatio;
                 const secondHeight = 100 - screenRatio;
+                const targetWidth = 720;
+                const avatarHeightPx = Math.floor(1280 * avatarHeight / 100);
+                const secondHeightPx = Math.floor(1280 * secondHeight / 100);
                 
                 if (avatarPosition === 'top') {
                     ffmpegCommand = [
                         '-i', 'avatar.mp4',
                         '-i', 'second.mp4',
                         '-filter_complex',
-                        `[0:v]scale=720:${Math.floor(1280 * avatarHeight / 100)}:force_original_aspect_ratio=decrease,pad=720:${Math.floor(1280 * avatarHeight / 100)}:(ow-iw)/2:(oh-ih)/2[v0];` +
-                        `[1:v]scale=720:${Math.floor(1280 * secondHeight / 100)}:force_original_aspect_ratio=decrease,pad=720:${Math.floor(1280 * secondHeight / 100)}:(ow-iw)/2:(oh-ih)/2[v1];` +
+                        `[0:v]scale=${targetWidth}:${avatarHeightPx}:force_original_aspect_ratio=increase,crop=${targetWidth}:${avatarHeightPx}[v0];` +
+                        `[1:v]scale=${targetWidth}:${secondHeightPx}:force_original_aspect_ratio=increase,crop=${targetWidth}:${secondHeightPx}[v1];` +
                         `[v0][v1]vstack=inputs=2[v]`,
                         '-map', '[v]',
                         '-map', '0:a?',
@@ -443,8 +287,8 @@ async function startProcessingBrowser() {
                         '-i', 'second.mp4',
                         '-i', 'avatar.mp4',
                         '-filter_complex',
-                        `[0:v]scale=720:${Math.floor(1280 * secondHeight / 100)}:force_original_aspect_ratio=decrease,pad=720:${Math.floor(1280 * secondHeight / 100)}:(ow-iw)/2:(oh-ih)/2[v0];` +
-                        `[1:v]scale=720:${Math.floor(1280 * avatarHeight / 100)}:force_original_aspect_ratio=decrease,pad=720:${Math.floor(1280 * avatarHeight / 100)}:(ow-iw)/2:(oh-ih)/2[v1];` +
+                        `[0:v]scale=${targetWidth}:${secondHeightPx}:force_original_aspect_ratio=increase,crop=${targetWidth}:${secondHeightPx}[v0];` +
+                        `[1:v]scale=${targetWidth}:${avatarHeightPx}:force_original_aspect_ratio=increase,crop=${targetWidth}:${avatarHeightPx}[v1];` +
                         `[v0][v1]vstack=inputs=2[v]`,
                         '-map', '[v]',
                         '-map', '1:a?',
@@ -459,14 +303,17 @@ async function startProcessingBrowser() {
                 // Left/right split
                 const avatarWidth = screenRatio;
                 const secondWidth = 100 - screenRatio;
+                const targetHeight = 1280;
+                const avatarWidthPx = Math.floor(720 * avatarWidth / 100);
+                const secondWidthPx = Math.floor(720 * secondWidth / 100);
                 
                 if (avatarPosition === 'left') {
                     ffmpegCommand = [
                         '-i', 'avatar.mp4',
                         '-i', 'second.mp4',
                         '-filter_complex',
-                        `[0:v]scale=${Math.floor(720 * avatarWidth / 100)}:1280:force_original_aspect_ratio=decrease,pad=${Math.floor(720 * avatarWidth / 100)}:1280:(ow-iw)/2:(oh-ih)/2[v0];` +
-                        `[1:v]scale=${Math.floor(720 * secondWidth / 100)}:1280:force_original_aspect_ratio=decrease,pad=${Math.floor(720 * secondWidth / 100)}:1280:(ow-iw)/2:(oh-ih)/2[v1];` +
+                        `[0:v]scale=${avatarWidthPx}:${targetHeight}:force_original_aspect_ratio=increase,crop=${avatarWidthPx}:${targetHeight}[v0];` +
+                        `[1:v]scale=${secondWidthPx}:${targetHeight}:force_original_aspect_ratio=increase,crop=${secondWidthPx}:${targetHeight}[v1];` +
                         `[v0][v1]hstack=inputs=2[v]`,
                         '-map', '[v]',
                         '-map', '0:a?',
@@ -481,8 +328,8 @@ async function startProcessingBrowser() {
                         '-i', 'second.mp4',
                         '-i', 'avatar.mp4',
                         '-filter_complex',
-                        `[0:v]scale=${Math.floor(720 * secondWidth / 100)}:1280:force_original_aspect_ratio=decrease,pad=${Math.floor(720 * secondWidth / 100)}:1280:(ow-iw)/2:(oh-ih)/2[v0];` +
-                        `[1:v]scale=${Math.floor(720 * avatarWidth / 100)}:1280:force_original_aspect_ratio=decrease,pad=${Math.floor(720 * avatarWidth / 100)}:1280:(ow-iw)/2:(oh-ih)/2[v1];` +
+                        `[0:v]scale=${secondWidthPx}:${targetHeight}:force_original_aspect_ratio=increase,crop=${secondWidthPx}:${targetHeight}[v0];` +
+                        `[1:v]scale=${avatarWidthPx}:${targetHeight}:force_original_aspect_ratio=increase,crop=${avatarWidthPx}:${targetHeight}[v1];` +
                         `[v0][v1]hstack=inputs=2[v]`,
                         '-map', '[v]',
                         '-map', '1:a?',
@@ -495,7 +342,7 @@ async function startProcessingBrowser() {
                 }
             }
         } else if (mode === 'corner') {
-            // Corner overlay (аватар в углу)
+            // Corner overlay (аватар в углу) - crop second video to fill screen
             const cornerMap = {
                 'top': 'W-w-10:10',
                 'bottom': 'W-w-10:H-h-10',
@@ -503,11 +350,15 @@ async function startProcessingBrowser() {
                 'right': 'W-w-10:H-h-10'
             };
             
+            const targetWidth = 720;
+            const targetHeight = 1280;
+            
             ffmpegCommand = [
                 '-i', 'second.mp4',
                 '-i', 'avatar.mp4',
                 '-filter_complex',
-                `[1:v]scale=iw*0.3:ih*0.3[ovr];[0:v][ovr]overlay=${cornerMap[avatarPosition]}[v]`,
+                `[0:v]scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,crop=${targetWidth}:${targetHeight}[bg];` +
+                `[1:v]scale=iw*0.3:ih*0.3[ovr];[bg][ovr]overlay=${cornerMap[avatarPosition]}[v]`,
                 '-map', '[v]',
                 '-map', '1:a?',
                 '-c:v', 'libx264',
@@ -520,13 +371,13 @@ async function startProcessingBrowser() {
         
         console.log('FFmpeg command:', ffmpegCommand);
         
-        // Запуск FFmpeg v0.12 (используем exec вместо run)
-        await ffmpeg.exec(ffmpegCommand);
+        // Запуск FFmpeg
+        await ffmpeg.run(...ffmpegCommand);
         
         updateProcessingStatus('Финализация...', 90);
         
-        // Чтение результата (v0.12 использует readFile)
-        const data = await ffmpeg.readFile('output.mp4');
+        // Чтение результата
+        const data = ffmpeg.FS('readFile', 'output.mp4');
         const blob = new Blob([data.buffer], { type: 'video/mp4' });
         appState.resultBlob = blob;
         
@@ -639,54 +490,23 @@ function safeAlert(message) {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('PRO Montage FREE WebApp initialized');
+    console.log('=== PRO Montage FREE WebApp v1.1 ===');
     console.log('Avatar video URL:', avatarVideoUrl);
-    console.log('User ID:', userId);
+    console.log('Avatar URL length:', avatarVideoUrl ? avatarVideoUrl.length : 0);
     
-    // Проверяем поддержку WebAssembly
-    const supportsWasm = (() => {
-        try {
-            if (typeof WebAssembly === 'object' && typeof WebAssembly.instantiate === 'function') {
-                const module = new WebAssembly.Module(Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00));
-                if (module instanceof WebAssembly.Module) {
-                    return new WebAssembly.Instance(module) instanceof WebAssembly.Instance;
-                }
-            }
-        } catch (e) {
-            console.error('WebAssembly check failed:', e);
-        }
-        return false;
-    })();
-    
-    console.log('WebAssembly support:', supportsWasm);
-    console.log('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
-    
-    if (!supportsWasm) {
-        safeAlert(
-            '⚠️ Ваш браузер не поддерживает WebAssembly!\n\n' +
-            'FFmpeg.wasm требует WebAssembly для работы.\n\n' +
-            'Пожалуйста, используйте современный браузер:\n' +
-            '• Chrome 57+\n' +
-            '• Firefox 52+\n' +
-            '• Safari 11+\n' +
-            '• Edge 16+'
-        );
-    }
+    // ОТЛАДКА: Проверяем URL параметры
+    console.log('All URL params:', window.location.search);
+    const allParams = {};
+    urlParams.forEach((value, key) => {
+        allParams[key] = value;
+    });
+    console.log('Parsed params:', allParams);
     
     if (!avatarVideoUrl) {
-        console.warn('No avatar video URL provided in query params');
-        console.warn('URL params:', window.location.search);
-        
-        // Показываем предупреждение, но позволяем использовать демо
-        const warningText = 
-            '⚠️ Видео аватара не найдено!\n\n' +
-            'Пожалуйста, откройте Pro-монтаж из бота после создания видео.\n\n' +
-            'Для демонстрации будет использовано тестовое видео.';
-        
-        safeAlert(warningText);
-        
-        // Используем тестовое видео для демонстрации
-        appState.avatarVideoUrl = 'https://res.cloudinary.com/demo/video/upload/dog.mp4';
+        console.error('⚠️ NO AVATAR VIDEO URL PROVIDED!');
+        console.log('This means video_url parameter is missing from URL');
+    } else if (avatarVideoUrl.includes('dog')) {
+        console.error('⚠️ WARNING: Avatar URL contains "dog" (test video)!');
     }
     
     showScreen(1);
@@ -698,4 +518,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 console.log('=== PRO Montage FREE WebApp v1.0 (FFmpeg.wasm) ===');
+
+
 
