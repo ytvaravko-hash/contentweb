@@ -405,3 +405,25 @@ body {
     color: #28a745;
     margin-bottom: 15px;
 }
+
+/* Error Screen */
+.error-container {
+    text-align: center;
+    padding: 20px;
+}
+
+.error-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+}
+
+.error-message {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    text-align: left;
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 8px;
+}
