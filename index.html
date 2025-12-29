@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PRO Монтаж (FREE)</title>
-    <link rel="stylesheet" href="styles.css?v=2">
+    
+    <!-- COI Service Worker - включает SharedArrayBuffer на GitHub Pages -->
+    <!-- Это ОБЯЗАТЕЛЬНО должно быть ПЕРВЫМ скриптом! -->
+    <script src="coi-serviceworker.js"></script>
+    
+    <link rel="stylesheet" href="styles.css?v=3">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- FFmpeg.wasm для обработки видео в браузере -->
     <!-- Пробуем локальную версию, если не работает - fallback на CDN -->
@@ -142,7 +147,7 @@
 
     </div>
 
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=3"></script>
 </body>
 </html>
 

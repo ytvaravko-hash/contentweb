@@ -40,6 +40,24 @@ async function loadFFmpeg() {
     try {
         updateProcessingStatus('Загрузка FFmpeg...', 5);
         
+        // Проверяем доступность SharedArrayBuffer
+        if (typeof SharedArrayBuffer === 'undefined') {
+            console.error('❌ SharedArrayBuffer is NOT available!');
+            console.error('   Это означает, что сервер не отправляет нужные заголовки.');
+            console.error('   Убедитесь, что веб-апка открыта через http://localhost:8000');
+            console.error('   Запустите: start_local.bat');
+            
+            throw new Error(
+                'Браузер заблокировал SharedArrayBuffer.\n\n' +
+                '🔧 Решение:\n' +
+                '1. Откройте start_local.bat\n' +
+                '2. Дождитесь запуска сервера\n' +
+                '3. Перезапустите Pro-монтаж'
+            );
+        }
+        
+        console.log('✅ SharedArrayBuffer is available');
+        
         const { createFFmpeg, fetchFile } = FFmpeg;
         
         // Пробуем локальный путь, если не работает - fallback на CDN
@@ -73,7 +91,7 @@ async function loadFFmpeg() {
         return true;
         
     } catch (error) {
-        console.error('❌ FFmpeg load error (both local and CDN failed):', error);
+        console.error('❌ FFmpeg load error:', error);
         return false;
     }
 }
@@ -255,7 +273,17 @@ async function startProcessing() {
         updateProcessingStatus('Загрузка FFmpeg...', 5);
         const loaded = await loadFFmpeg();
         if (!loaded) {
-            throw new Error('Не удалось загрузить FFmpeg');
+            // Проверяем причину
+            if (typeof SharedArrayBuffer === 'undefined') {
+                throw new Error(
+                    '❌ SharedArrayBuffer недоступен!\n\n' +
+                    'Веб-апка открыта не с того сервера.\n\n' +
+                    '🔧 Решение:\n' +
+                    '1. Запустите start_local.bat\n' +
+                    '2. Перезапустите Pro-монтаж в боте'
+                );
+            }
+            throw new Error('Не удалось загрузить FFmpeg. Проверьте интернет-соединение.');
         }
         
         // Шаг 2: Скачивание аватара
