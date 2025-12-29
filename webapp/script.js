@@ -164,23 +164,56 @@ function sendSettingsToBot() {
     };
     
     console.log('Sending settings to bot:', dataToSend);
+    console.log('Telegram WebApp available:', !!tg);
+    console.log('initData:', tg.initData);
+    
+    // Проверяем, открыта ли веб-апка через Telegram
+    if (!tg.initData || tg.initData === '') {
+        console.error('WebApp not opened via Telegram!');
+        
+        // Показываем инструкцию
+        document.getElementById('error-message').innerHTML = `
+            <b>Веб-апка открыта не через Telegram!</b><br><br>
+            Чтобы отправить настройки:<br>
+            1. Откройте бота в Telegram<br>
+            2. Создайте видео аватара<br>
+            3. Нажмите "Pro-монтаж"<br>
+            4. Выберите настройки<br><br>
+            <b>Выбранные настройки:</b><br>
+            Режим: ${appState.mode}<br>
+            Позиция: ${appState.avatarPosition}<br>
+            Размер: ${appState.screenRatio}%
+        `;
+        showScreen(5);
+        return;
+    }
     
     // Отправляем данные боту через Telegram WebApp API
     try {
-        tg.sendData(JSON.stringify(dataToSend));
-        console.log('Data sent successfully!');
+        const jsonData = JSON.stringify(dataToSend);
+        console.log('Calling tg.sendData with:', jsonData);
+        
+        tg.sendData(jsonData);
+        
+        console.log('sendData called successfully!');
         
         // Показываем сообщение об успехе
         showScreen(4);
         
-        // Закрываем через 2 секунды
+        // Закрываем через 1.5 секунды
         setTimeout(() => {
+            console.log('Closing WebApp...');
             tg.close();
-        }, 2000);
+        }, 1500);
         
     } catch (error) {
         console.error('Error sending data:', error);
-        safeAlert('Ошибка отправки данных. Попробуйте еще раз.');
+        document.getElementById('error-message').innerHTML = `
+            <b>Ошибка отправки:</b><br>
+            ${error.message}<br><br>
+            Попробуйте закрыть и открыть веб-апку заново.
+        `;
+        showScreen(5);
     }
 }
 
@@ -213,7 +246,18 @@ function safeAlert(message) {
 
 document.addEventListener('DOMContentLoaded', function() {
     console.log('=== PRO Montage WebApp v2.0 (VPS Processing) ===');
+    console.log('Telegram WebApp object:', tg);
+    console.log('initData:', tg.initData);
+    console.log('initDataUnsafe:', tg.initDataUnsafe);
     console.log('Avatar video URL:', avatarVideoUrl ? 'provided' : 'not provided');
+    
+    // Проверяем, открыта ли веб-апка через Telegram
+    if (!tg.initData || tg.initData === '') {
+        console.warn('⚠️ WebApp opened directly in browser, not via Telegram');
+        console.warn('sendData() will not work!');
+    } else {
+        console.log('✅ WebApp opened via Telegram');
+    }
     
     showScreen(1);
     updateComposition();
