@@ -246,10 +246,114 @@ function updateState(key, value) {
 }
 
 // ============================================
-// Screen 4: Processing (FFmpeg в браузере!)
+// Screen 4: Processing
 // ============================================
 
+// Серверная обработка (БЫСТРО! 10-20x быстрее)
+const USE_SERVER = true; // true = сервер, false = браузер
+const SERVER_URL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+    ? 'http://localhost:8001'  // Разработка
+    : `${window.location.protocol}//${window.location.hostname}:8001`;  // Продакшн
+
 async function startProcessing() {
+    if (USE_SERVER) {
+        return await startProcessingServer();
+    } else {
+        return await startProcessingBrowser();
+    }
+}
+
+// Серверная обработка
+async function startProcessingServer() {
+    if (!appState.secondVideoFile) {
+        safeAlert('Пожалуйста, загрузите видео');
+        return;
+    }
+    
+    if (!appState.avatarVideoUrl) {
+        safeAlert(
+            '⚠️ URL аватара не найден!\n\n' +
+            'Пожалуйста:\n' +
+            '1. Вернитесь в бот\n' +
+            '2. Создайте видео с аватаром\n' +
+            '3. Нажмите "🎞️ Pro-монтаж (beta)"\n\n' +
+            'Видео должно быть создано в той же сессии.'
+        );
+        return;
+    }
+    
+    showScreen(4);
+    
+    try {
+        // Шаг 1: Скачивание аватара
+        updateProcessingStatus('Загрузка видео аватара...', 10);
+        const avatarBlob = await fetch(appState.avatarVideoUrl).then(r => r.blob());
+        
+        // Шаг 2: Подготовка данных
+        updateProcessingStatus('Подготовка файлов...', 20);
+        
+        const formData = new FormData();
+        formData.append('avatar_video', avatarBlob, 'avatar.mp4');
+        formData.append('second_video', appState.secondVideoFile);
+        formData.append('mode', appState.mode === 'split_screen' ? 'split' : 'corner');
+        formData.append('avatar_position', appState.avatarPosition);
+        formData.append('avatar_size', appState.screenRatio);
+        
+        console.log('🚀 Sending to server:', {
+            server: SERVER_URL,
+            mode: appState.mode,
+            position: appState.avatarPosition,
+            size: appState.screenRatio,
+            avatar_size: avatarBlob.size,
+            second_size: appState.secondVideoFile.size
+        });
+        
+        // Шаг 3: Отправка на сервер
+        updateProcessingStatus('⚡ Быстрая обработка на сервере...', 30);
+        
+        const response = await fetch(`${SERVER_URL}/process`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(error.detail || 'Server processing failed');
+        }
+        
+        updateProcessingStatus('Загрузка результата...', 80);
+        
+        // Шаг 4: Получение результата
+        const resultBlob = await response.blob();
+        appState.resultBlob = resultBlob;
+        
+        updateProcessingStatus('Готово!', 100);
+        
+        console.log('✅ Server processing complete!', resultBlob.size, 'bytes');
+        
+        // Показываем результат
+        setTimeout(() => showResultScreen(resultBlob), 500);
+        
+    } catch (error) {
+        console.error('Server processing error:', error);
+        
+        // Если сервер не доступен, показываем ошибку
+        if (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            showErrorScreen(
+                '❌ Сервер обработки недоступен\n\n' +
+                'Убедитесь что сервер запущен:\n' +
+                '> python video_api.py\n\n' +
+                'Или установите USE_SERVER = false в script.js\n' +
+                'для браузерной обработки (медленнее)'
+            );
+        } else {
+            showErrorScreen(error.message);
+        }
+    }
+}
+
+// Браузерная обработка (медленнее, но без сервера)
+async function startProcessingBrowser() {
     if (!appState.secondVideoFile) {
         safeAlert('Пожалуйста, загрузите видео');
         return;
