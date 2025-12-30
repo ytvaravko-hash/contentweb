@@ -263,10 +263,32 @@ const SERVER_URL = serverUrl || 'http://localhost:8001';
 async function startProcessing() {
     console.log('🔧 Processing mode:', USE_SERVER ? '⚡ SERVER' : '🌐 BROWSER');
     console.log('📍 Location:', window.location.origin);
-    console.log('🖥️ Is local:', IS_LOCAL);
+    console.log('🖥️ Server URL:', SERVER_URL);
     
+    // Если указан сервер - пробуем его, при ошибке - fallback на браузер
     if (USE_SERVER) {
-        return await startProcessingServer();
+        try {
+            // Проверяем доступность сервера
+            const healthCheck = await fetch(`${SERVER_URL}/health`, { 
+                method: 'GET',
+                signal: AbortSignal.timeout(3000) // 3 сек таймаут
+            });
+            
+            if (healthCheck.ok) {
+                console.log('✅ Server available, using server processing');
+                return await startProcessingServer();
+            } else {
+                throw new Error('Server not healthy');
+            }
+        } catch (error) {
+            console.warn('⚠️ Server unavailable, falling back to browser processing:', error.message);
+            safeAlert(
+                '⚠️ Сервер обработки недоступен\n\n' +
+                'Используем браузерную обработку (медленнее).\n' +
+                'Это может занять 2-3 минуты.'
+            );
+            return await startProcessingBrowser();
+        }
     } else {
         return await startProcessingBrowser();
     }
@@ -345,24 +367,11 @@ async function startProcessingServer() {
         
     } catch (error) {
         console.error('Server processing error:', error);
-        
-        // Если сервер не доступен - пробуем браузерную обработку
-        if (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            console.warn('⚠️ Server unavailable, falling back to browser processing');
-            
-            // Fallback на браузерную обработку
-            showErrorScreen(
-                '⚠️ Сервер обработки недоступен\n\n' +
-                `URL: ${SERVER_URL}\n\n` +
-                'Возможные причины:\n' +
-                '• Сервер не запущен\n' +
-                '• Неверный адрес сервера\n' +
-                '• Блокировка CORS\n\n' +
-                'Обратитесь к администратору бота.'
-            );
-        } else {
-            showErrorScreen(error.message);
-        }
+        showErrorScreen(
+            '❌ Ошибка обработки на сервере\n\n' +
+            error.message + '\n\n' +
+            'Попробуйте ещё раз или обратитесь к администратору.'
+        );
     }
 }
 
@@ -654,6 +663,13 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('User ID:', userId);
     console.log('Server URL:', serverUrl || '(not set - browser mode)');
     console.log('Processing mode:', USE_SERVER ? '⚡ SERVER (fast)' : '🌐 BROWSER (slow)');
+    
+    // Показываем режим обработки пользователю
+    if (USE_SERVER) {
+        console.log('🚀 Will try server processing with fallback to browser');
+    } else {
+        console.log('🌐 Browser-only processing mode');
+    }
     
     // Проверяем поддержку WebAssembly
     const supportsWasm = (() => {
