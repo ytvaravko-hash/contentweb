@@ -163,55 +163,50 @@ function sendSettingsToBot() {
         taskId: Date.now().toString()
     };
     
-    console.log('Sending settings to bot:', dataToSend);
-    console.log('Telegram WebApp available:', !!tg);
-    console.log('initData:', tg.initData);
+    console.log('=== SENDING DATA TO BOT ===');
+    console.log('Data:', dataToSend);
+    console.log('Telegram WebApp:', tg);
+    console.log('initData length:', tg.initData ? tg.initData.length : 0);
+    console.log('platform:', tg.platform);
+    console.log('version:', tg.version);
     
     // Проверяем, открыта ли веб-апка через Telegram
-    if (!tg.initData || tg.initData === '') {
-        console.error('WebApp not opened via Telegram!');
-        
-        // Показываем инструкцию
-        document.getElementById('error-message').innerHTML = `
-            <b>Веб-апка открыта не через Telegram!</b><br><br>
-            Чтобы отправить настройки:<br>
-            1. Откройте бота в Telegram<br>
-            2. Создайте видео аватара<br>
-            3. Нажмите "Pro-монтаж"<br>
-            4. Выберите настройки<br><br>
-            <b>Выбранные настройки:</b><br>
-            Режим: ${appState.mode}<br>
-            Позиция: ${appState.avatarPosition}<br>
-            Размер: ${appState.screenRatio}%
-        `;
-        showScreen(5);
-        return;
-    }
+    // НО! На некоторых платформах initData может быть пустым
+    // Поэтому всё равно пробуем отправить
     
-    // Отправляем данные боту через Telegram WebApp API
+    const jsonData = JSON.stringify(dataToSend);
+    console.log('JSON to send:', jsonData);
+    
     try {
-        const jsonData = JSON.stringify(dataToSend);
-        console.log('Calling tg.sendData with:', jsonData);
-        
+        // Пробуем отправить данные
         tg.sendData(jsonData);
+        console.log('sendData() called!');
         
-        console.log('sendData called successfully!');
-        
-        // Показываем сообщение об успехе
+        // Показываем успех
         showScreen(4);
         
-        // Закрываем через 1.5 секунды
+        // Закрываем через 1 секунду
         setTimeout(() => {
             console.log('Closing WebApp...');
             tg.close();
-        }, 1500);
+        }, 1000);
         
     } catch (error) {
-        console.error('Error sending data:', error);
+        console.error('sendData error:', error);
+        
+        // Показываем ошибку с деталями
         document.getElementById('error-message').innerHTML = `
-            <b>Ошибка отправки:</b><br>
+            <b>Ошибка отправки данных</b><br><br>
             ${error.message}<br><br>
-            Попробуйте закрыть и открыть веб-апку заново.
+            <b>Отладочная информация:</b><br>
+            Platform: ${tg.platform || 'unknown'}<br>
+            Version: ${tg.version || 'unknown'}<br>
+            initData: ${tg.initData ? 'есть' : 'нет'}<br><br>
+            <b>Ваши настройки:</b><br>
+            Режим: ${appState.mode}<br>
+            Позиция: ${appState.avatarPosition}<br>
+            Размер: ${appState.screenRatio}%<br><br>
+            <i>Попробуйте закрыть и открыть Pro-монтаж заново</i>
         `;
         showScreen(5);
     }
