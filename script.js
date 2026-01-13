@@ -3,9 +3,21 @@
 // FFmpeg.wasm в браузере + Telegram Bot API
 // ============================================
 
-const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+// Telegram WebApp bridge (безопасно: чтобы не падало во внешнем браузере)
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : {
+    ready: () => {},
+    expand: () => {},
+    close: () => {},
+    sendData: () => {},
+    showAlert: null,
+    colorScheme: 'light',
+    initDataUnsafe: {},
+    BackButton: { show: () => {}, hide: () => {}, onClick: () => {} },
+    MainButton: { hide: () => {} }
+};
+
+try { tg.ready(); } catch (e) {}
+try { tg.expand(); } catch (e) {}
 
 // Получаем параметры из query string
 const urlParams = new URLSearchParams(window.location.search);
