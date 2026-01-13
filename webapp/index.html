@@ -87,6 +87,27 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Субтитры (ZapCap) -->
+                <div class="setting-group">
+                    <div class="setting-header checkbox-header">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="add-subtitles" onchange="toggleSubtitles(this.checked)">
+                            <span class="checkbox-label">Добавить субтитры</span>
+                        </label>
+                    </div>
+                    <div class="setting-content" id="subtitle-settings">
+                        <div class="setting-item">
+                            <label class="setting-label">Шрифт/стиль субтитров:</label>
+                            <select class="setting-select" id="subtitle-template" disabled onchange="updateState('subtitleTemplateId', this.value)">
+                                <option value="">Загрузка стилей...</option>
+                            </select>
+                            <p class="hint-text" id="subtitle-hint" style="margin-top: 8px;">
+                                💡 Стили подгружаются из ZapCap и применяются на сервере
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <button class="action-btn" onclick="startProcessing()">
