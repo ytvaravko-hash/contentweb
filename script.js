@@ -11,8 +11,6 @@ tg.expand();
 const urlParams = new URLSearchParams(window.location.search);
 const avatarVideoUrl = decodeURIComponent(urlParams.get('video_url') || '');
 const userId = tg.initDataUnsafe?.user?.id || 'test_user';
-
-// URL сервера для обработки видео (передаётся ботом)
 const serverUrl = decodeURIComponent(urlParams.get('server_url') || '');
 
 // FFmpeg instance
@@ -27,6 +25,9 @@ const appState = {
     secondVideoFile: null,
     avatarPosition: 'top',
     screenRatio: 50,
+    addSubtitles: false,
+    subtitleTemplateId: '',
+    subtitleTemplates: [],
     resultBlob: null
 };
 
@@ -249,46 +250,129 @@ function updateState(key, value) {
 }
 
 // ============================================
+// Subtitles (ZapCap)
+// ============================================
+
+function toggleSubtitles(enabled) {
+    appState.addSubtitles = !!enabled;
+    const select = document.getElementById('subtitle-template');
+    const hint = document.getElementById('subtitle-hint');
+    if (!select) return;
+
+    const hasTemplates = Array.isArray(appState.subtitleTemplates) && appState.subtitleTemplates.length > 0;
+    select.disabled = !(appState.addSubtitles && hasTemplates);
+
+    if (!USE_SERVER && appState.addSubtitles) {
+        // В браузерном режиме ZapCap недоступен (ключи должны быть на сервере)
+        safeAlert('Субтитры доступны только при серверной обработке (через server_url).');
+        appState.addSubtitles = false;
+        document.getElementById('add-subtitles').checked = false;
+        select.disabled = true;
+    }
+
+    if (hint) {
+        if (!USE_SERVER) {
+            hint.textContent = '⚠️ Субтитры доступны только при серверной обработке';
+        } else if (!hasTemplates) {
+            hint.textContent = '⏳ Загружаем стили из ZapCap...';
+        } else if (appState.addSubtitles) {
+            hint.textContent = '✅ Субтитры будут добавлены через ZapCap';
+        } else {
+            hint.textContent = '💡 Стили подгружаются из ZapCap и применяются на сервере';
+        }
+    }
+}
+
+async function loadSubtitleTemplates() {
+    const select = document.getElementById('subtitle-template');
+    const hint = document.getElementById('subtitle-hint');
+    if (!select) return;
+
+    // По умолчанию выключено
+    select.disabled = true;
+
+    if (!USE_SERVER) {
+        select.innerHTML = '<option value=\"\">Субтитры доступны только на сервере</option>';
+        if (hint) hint.textContent = '⚠️ Субтитры доступны только при серверной обработке';
+        return;
+    }
+
+    try {
+        select.innerHTML = '<option value=\"\">Загрузка стилей...</option>';
+        if (hint) hint.textContent = '⏳ Загружаем стили из ZapCap...';
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        const res = await fetch(`${SERVER_URL}/zapcap/templates`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) {
+            throw new Error(`Templates fetch failed: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const templates = Array.isArray(data.templates) ? data.templates : (Array.isArray(data) ? data : []);
+        appState.subtitleTemplates = templates;
+
+        if (!templates.length) {
+            select.innerHTML = '<option value=\"\">Нет доступных стилей (ZapCap)</option>';
+            if (hint) hint.textContent = '⚠️ ZapCap не вернул стили (проверьте ключ и доступность)';
+            return;
+        }
+
+        select.innerHTML = '<option value=\"\">Выберите стиль</option>' + templates
+            .filter(t => t && t.id)
+            .map(t => `<option value=\"${t.id}\">${escapeHtml(t.name || t.id)}</option>`)
+            .join('');
+
+        // По умолчанию выберем первый (но только если чекбокс включён)
+        if (!appState.subtitleTemplateId) {
+            appState.subtitleTemplateId = templates[0].id;
+        }
+
+        if (appState.subtitleTemplateId) {
+            select.value = appState.subtitleTemplateId;
+        }
+
+        toggleSubtitles(appState.addSubtitles);
+    } catch (e) {
+        console.warn('Failed to load ZapCap templates:', e);
+        select.innerHTML = '<option value=\"\">Ошибка загрузки стилей</option>';
+        if (hint) hint.textContent = '⚠️ Ошибка загрузки стилей ZapCap';
+    }
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('\"', '&quot;')
+        .replaceAll(\"'\", '&#039;');
+}
+
+// ============================================
 // Screen 4: Processing
 // ============================================
 
-// ============================================
 // Серверная обработка (БЫСТРО! 10-20x быстрее)
-// ============================================
-// Если бот передал server_url - используем VPS сервер (быстро)
-// Иначе - браузерная обработка через FFmpeg.wasm (медленно)
-const USE_SERVER = !!serverUrl;
+// Автоопределение: сервер только для localhost, браузер для GitHub Pages
+const IS_LOCAL = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
+const USE_SERVER = !!serverUrl || IS_LOCAL;
 const SERVER_URL = serverUrl || 'http://localhost:8001';
 
 async function startProcessing() {
     console.log('🔧 Processing mode:', USE_SERVER ? '⚡ SERVER' : '🌐 BROWSER');
     console.log('📍 Location:', window.location.origin);
-    console.log('🖥️ Server URL:', SERVER_URL);
+    console.log('🖥️ Is local:', IS_LOCAL);
+    console.log('🌐 Server URL:', SERVER_URL);
     
-    // Если указан сервер - пробуем его, при ошибке - fallback на браузер
     if (USE_SERVER) {
-        try {
-            // Проверяем доступность сервера
-            const healthCheck = await fetch(`${SERVER_URL}/health`, { 
-                method: 'GET',
-                signal: AbortSignal.timeout(3000) // 3 сек таймаут
-            });
-            
-            if (healthCheck.ok) {
-                console.log('✅ Server available, using server processing');
-                return await startProcessingServer();
-            } else {
-                throw new Error('Server not healthy');
-            }
-        } catch (error) {
-            console.warn('⚠️ Server unavailable, falling back to browser processing:', error.message);
-            safeAlert(
-                '⚠️ Сервер обработки недоступен\n\n' +
-                'Используем браузерную обработку (медленнее).\n' +
-                'Это может занять 2-3 минуты.'
-            );
-            return await startProcessingBrowser();
-        }
+        return await startProcessingServer();
     } else {
         return await startProcessingBrowser();
     }
@@ -329,12 +413,16 @@ async function startProcessingServer() {
         formData.append('mode', appState.mode === 'split_screen' ? 'split' : 'corner');
         formData.append('avatar_position', appState.avatarPosition);
         formData.append('avatar_size', appState.screenRatio);
+        formData.append('add_subtitles', appState.addSubtitles ? 'true' : 'false');
+        formData.append('subtitle_template_id', appState.subtitleTemplateId || '');
         
         console.log('🚀 Sending to server:', {
             server: SERVER_URL,
             mode: appState.mode,
             position: appState.avatarPosition,
             size: appState.screenRatio,
+            add_subtitles: appState.addSubtitles,
+            subtitle_template_id: appState.subtitleTemplateId || null,
             avatar_size: avatarBlob.size,
             second_size: appState.secondVideoFile.size
         });
@@ -367,11 +455,19 @@ async function startProcessingServer() {
         
     } catch (error) {
         console.error('Server processing error:', error);
-        showErrorScreen(
-            '❌ Ошибка обработки на сервере\n\n' +
-            error.message + '\n\n' +
-            'Попробуйте ещё раз или обратитесь к администратору.'
-        );
+        
+        // Если сервер не доступен, показываем ошибку
+        if (error.message.includes('fetch') || error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            showErrorScreen(
+                '❌ Сервер обработки недоступен\n\n' +
+                'Убедитесь что сервер запущен:\n' +
+                '> python video_api.py\n\n' +
+                'Или установите USE_SERVER = false в script.js\n' +
+                'для браузерной обработки (медленнее)'
+            );
+        } else {
+            showErrorScreen(error.message);
+        }
     }
 }
 
@@ -658,18 +754,11 @@ function safeAlert(message) {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('PRO Montage WebApp v2.0 initialized');
+    console.log('PRO Montage FREE WebApp initialized');
     console.log('Avatar video URL:', avatarVideoUrl);
     console.log('User ID:', userId);
-    console.log('Server URL:', serverUrl || '(not set - browser mode)');
-    console.log('Processing mode:', USE_SERVER ? '⚡ SERVER (fast)' : '🌐 BROWSER (slow)');
-    
-    // Показываем режим обработки пользователю
-    if (USE_SERVER) {
-        console.log('🚀 Will try server processing with fallback to browser');
-    } else {
-        console.log('🌐 Browser-only processing mode');
-    }
+    console.log('Server URL:', serverUrl || '(not provided)');
+    console.log('Processing mode:', USE_SERVER ? '⚡ SERVER' : '🌐 BROWSER');
     
     // Проверяем поддержку WebAssembly
     const supportsWasm = (() => {
@@ -719,12 +808,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     showScreen(1);
     updateComposition();
+    loadSubtitleTemplates();
     
     if (tg.colorScheme === 'dark') {
         document.body.style.background = 'linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%)';
     }
 });
 
-console.log('=== PRO Montage WebApp v2.0 ===');
-console.log('Mode:', USE_SERVER ? 'VPS Server Processing' : 'Browser FFmpeg.wasm');
+console.log('=== PRO Montage FREE WebApp v1.0 (FFmpeg.wasm) ===');
 
