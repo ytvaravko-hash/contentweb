@@ -22,7 +22,7 @@ try { tg.expand(); } catch (e) {}
 // Получаем параметры из query string
 const urlParams = new URLSearchParams(window.location.search);
 const avatarVideoUrl = decodeURIComponent(urlParams.get('video_url') || '');
-const userId = tg.initDataUnsafe?.user?.id || 'test_user';
+const userId = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) ? tg.initDataUnsafe.user.id : 'test_user';
 const serverUrl = decodeURIComponent(urlParams.get('server_url') || '');
 
 // FFmpeg instance
@@ -359,12 +359,13 @@ async function loadSubtitleTemplates() {
 }
 
 function escapeHtml(str) {
+    // Без replaceAll / optional chaining: совместимее со старыми WebView
     return String(str)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('\"', '&quot;')
-        .replaceAll(\"'\", '&#039;');
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // ============================================
